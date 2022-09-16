@@ -27,7 +27,7 @@
 //!     - https://www.peterkovesi.com/papers/FastGaussianSmoothing.pdf
 //!     - https://github.com/bfraboni/FastGaussianBlur
 //!
-//! **Note:** The fast gaussian blur algorithm is not accurate on image boundaries.
+//! **Note:** The fast gaussian blur algorithm is not accurate on image boundaries.
 //! It performs a diffusion of the signal with several independant passes, each pass depending
 //! of the preceding one. Some of the diffused signal is lost near borders and results in a slight
 //! loss of accuracy for next pass. This problem can be solved by increasing the image support of
@@ -69,12 +69,21 @@ enum BorderPolicy
 
 // original generic version
 template <typename T, int C>
-void horizontal_blur_extend(const T *in, T *out, const int w, const int h, const int r)
+void horizontal_blur_extend(const T *in, T *out, const int w, const int h, int r)
 {
     // change the local variable types depending on the template type for faster calculations
     using calc_type = std::conditional_t<std::is_integral<T>::value, int, float>;
 
-    float iarr = 1.f / (r + r + 1);
+    r = 0.5f * (r - 1); // r must be odd, if is even we change a bit the factor
+    const float iarr = 1.f / (r + r + 1);
+
+    int fill[C] = {0};
+    if (r > w)
+        for (int ch = 0; ch < C; ++ch)
+            fill[ch] = (r - w);
+
+    const int acc_window = std::min(r, w);
+
 #pragma omp parallel for
     for (int i = 0; i < h; i++)
     {
@@ -91,15 +100,15 @@ void horizontal_blur_extend(const T *in, T *out, const int w, const int h, const
         {
             fv[ch] = in[begin * C + ch];
             lv[ch] = in[(end - 1) * C + ch];
-            acc[ch] = (r + 1) * fv[ch];
+            acc[ch] = fill[ch] * lv[ch] + (r + 1) * fv[ch];
         }
 
         // initial acucmulation
-        for (int j = 0; j < r; j++)
+        for (int j = 0; j < acc_window; j++)
             for (int ch = 0; ch < C; ++ch)
             {
                 // prefilling the accumulator with the last value seems slower than/equal to this ternary
-                acc[ch] += j < w ? in[(begin + j) * C + ch] : lv[ch];
+                acc[ch] += in[(begin + j) * C + ch];
             }
 
         // perform filtering
@@ -115,12 +124,21 @@ void horizontal_blur_extend(const T *in, T *out, const int w, const int h, const
 
 // version for kernels that are correctly sized, that is when r <= w
 template <typename T, int C>
-void horizontal_blur_extend_small_kernel(const T *in, T *out, const int w, const int h, const int r)
+void horizontal_blur_extend_small_kernel(const T *in, T *out, const int w, const int h, int r)
 {
     // change the local variable types depending on the template type for faster calculations
     using calc_type = std::conditional_t<std::is_integral<T>::value, int, float>;
 
-    float iarr = 1.f / (r + r + 1);
+    r = 0.5f * (r - 1);
+    const float iarr = 1.f / (r + r + 1);
+
+    int fill[C] = {0};
+    if (r > w)
+        for (int ch = 0; ch < C; ++ch)
+            fill[ch] = (r - w);
+
+    const int acc_window = std::min(r, w);
+
 #pragma omp parallel for
     for (int i = 0; i < h; i++)
     {
@@ -134,15 +152,15 @@ void horizontal_blur_extend_small_kernel(const T *in, T *out, const int w, const
         {
             fv[ch] = in[ti * C + ch];
             lv[ch] = in[(ti + w - 1) * C + ch];
-            acc[ch] = (r + 1) * fv[ch];
+            acc[ch] = fill[ch] * lv[ch] + (r + 1) * fv[ch];
         }
 
         // initial acucmulation inside the image buffer
-        for (int j = 0; j < r; j++)
+        for (int j = 0; j < acc_window; j++)
             for (int ch = 0; ch < C; ++ch)
             {
                 // prefilling the accumulator with the last value seems slower than/equal to this ternary
-                acc[ch] += j < w ? in[(begin + j) * C + ch] : lv[ch];
+                acc[ch] += in[(begin + j) * C + ch];
             }
 
         for (int j = 0; j <= r; j++, ri++, ti++) // remove li++ and li=begin instead of li=begin-r-1
@@ -170,12 +188,20 @@ void horizontal_blur_extend_small_kernel(const T *in, T *out, const int w, const
 
 // version for kernels that are too large, that is when r > w
 template <typename T, int C>
-void horizontal_blur_extend_large_kernel(const T *in, T *out, const int w, const int h, const int r)
+void horizontal_blur_extend_large_kernel(const T *in, T *out, const int w, const int h, int r)
 {
     // change the local variable types depending on the template type for faster calculations
     using calc_type = std::conditional_t<std::is_integral<T>::value, int, float>;
-
+    r = 0.5f * (r - 1);
     float iarr = 1.f / (r + r + 1);
+
+    int fill[C] = {0};
+    if (r > w)
+        for (int ch = 0; ch < C; ++ch)
+            fill[ch] = (r - w);
+
+    const int acc_window = std::min(r, w);
+
 #pragma omp parallel for
     for (int i = 0; i < h; i++)
     {
@@ -187,15 +213,15 @@ void horizontal_blur_extend_large_kernel(const T *in, T *out, const int w, const
         {
             fv[ch] = in[begin * C + ch];
             lv[ch] = in[(end - 1) * C + ch];
-            acc[ch] = (r + 1) * fv[ch];
+            acc[ch] = fill[ch] * lv[ch] + (r + 1) * fv[ch];
         }
 
         // initial acucmulation
-        for (int j = 0; j < r; j++)
+        for (int j = 0; j < acc_window; j++)
             for (int ch = 0; ch < C; ++ch)
             {
                 // prefilling the accumulator with the last value seems slower than/equal to this ternary
-                acc[ch] += j < w ? in[(begin + j) * C + ch] : lv[ch];
+                acc[ch] += in[(begin + j) * C + ch];
             }
 
         for (int ti = begin; ti < end; ti++)
