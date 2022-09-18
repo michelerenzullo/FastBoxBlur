@@ -14,8 +14,8 @@
                 "/std:c++20",
                 "/D \"NDEBUG\"",
                 "/nologo",
-                "/Fe${fileDirname}\\${fileBasenameNoExtension}.exe",
-                "${file}"
+                "/Fe${workspaceFolder}/main.exe",
+                "${workspaceFolder}/main.cpp"
             ],
             "options": {
                 "cwd": "${fileDirname}"
