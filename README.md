@@ -124,7 +124,7 @@ The algorithm is designed to be a portable, easy, and faster replacement of `cv:
 Benchmark with 45 images 3 channels from 1500 x 1000 px to 11400 x 7600 px, box car size = (2 * width - 1)
   
 
-![](data/benchmark.png)
+![](data/bench.png)
 
   
 
