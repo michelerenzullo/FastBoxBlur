@@ -151,7 +151,9 @@ void horizontal_blur_kernel_reflect(const T *in, T *out, const int w, const int 
 template <typename T, int C>
 void flip_block(const T *in, T *out, const int w, const int h)
 {
-    constexpr int block = 256 / C;
+    // Suppose a square block of L2 cache size = 256KB
+    // to be divided for the num of channels and bytes 
+    constexpr int block = sqrt(262144 / (C * sizeof(T)));
 #pragma omp parallel for collapse(2)
     for (int x = 0; x < w; x += block)
         for (int y = 0; y < h; y += block)
