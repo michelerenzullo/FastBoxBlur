@@ -74,14 +74,15 @@ e d c b | a b c d e | d c b a
 
 The reflection padding is inside the image buffer!
 
- **WIP - Experimental**
+ ### WIP - Experimental
  
 If defined `DOUBLE_ACCUMULATOR` an alternative function is available 
 ```c++
  template <typename  T, int  C> 
  void  horizontal_blur_kernel_reflect_double(const  T  *in, T  *out, const  int  w, const  int  h, const  int  ksize)
 ```
-It's a variation that allows 2 passes of accumulation at once, @TJCoding original idea was to avoid the re-iteration of the function for each pass doing 2 ( or ideally N) accumulations at once. 
+[@TJCoding](https://github.com/TJCoding) original idea was to avoid the re-iteration of the function for each pass doing 2 ( or ideally N ) accumulations at once.  
+
 This has been achieved using:
 1) A "rough and easy" circular buffer implementation, that stores the 1st pass output sums in a deque
 2) A Lookup table used to get the correct index at bounds. 
