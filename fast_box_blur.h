@@ -26,9 +26,7 @@ void horizontal_blur_kernel_reflect_double(const T *in, T *out, const int w, con
         lut[i] = i;
     std::copy_n(lut.rbegin() + w - 1, w - 2, lut.begin() + w);
 
-#pragma omp parallel for
-    for (int i = 0; i < h; i++)
-    {
+    hybrid_loop(h, [&](auto i) {
         const int begin = i * w;
         calc_type acc[C] = {}, acc2[C] = {}; // first value, last value, sliding accumulator
 
@@ -60,7 +58,7 @@ void horizontal_blur_kernel_reflect_double(const T *in, T *out, const int w, con
                     out[(begin + j - r * 2) * C + ch] = acc2[ch] * iarr2 + (std::is_integral_v<T> ? 0.5f : 0);
             }
         }
-    }
+    });
 }
 #endif
 
@@ -74,9 +72,7 @@ void horizontal_blur_kernel_reflect(const T *in, T *out, const int w, const int 
 
     const float iarr = 1.f / (r + r + 1);
 
-#pragma omp parallel for
-    for (int i = 0; i < h; i++)
-    {
+    hybrid_loop(h, [&](auto i) {
         const int begin = i * w, end = begin + w, max_end = end - 1;
         int li = begin + r, ri = begin + r + 1; // left index(mirrored in the beginning), right index(mirrored at the end)
         calc_type acc[C] = {};
@@ -131,7 +127,7 @@ void horizontal_blur_kernel_reflect(const T *in, T *out, const int w, const int 
             }
             ++li, --ri;
         }
-    }
+    });
 }
 
 //!
@@ -152,28 +148,33 @@ void flip_block(const T *in, T *out, const int w, const int h)
     // Suppose a square block of L2 cache size = 256KB
     // to be divided for the num of channels and bytes
     const int block = sqrt(262144.0 / (C * sizeof(T)));
-#pragma omp parallel for collapse(2)
-    for (int x = 0; x < w; x += block)
-        for (int y = 0; y < h; y += block)
-        {
-            const T *p = in + y * w * C + x * C;
-            T *q = out + y * C + x * h * C;
+    const int w_blocks = std::ceil((float)w / block);
+    const int h_blocks = std::ceil((float)h / block);
+    const int last_blockx = w % block == 0 ? block : w % block;
+    const int last_blocky = h % block == 0 ? block : h % block;
 
-            const int blockx = std::min(w, x + block) - x;
-            const int blocky = std::min(h, y + block) - y;
+    hybrid_loop(w_blocks * h_blocks, [&](int n) {
+            const int x = n / h_blocks;
+            const int y = n % h_blocks;
+            const int blockx = (x == w_blocks - 1) ? last_blockx : block;
+            const int blocky = (y == h_blocks - 1) ? last_blocky : block;
+
+            const T *p = in + block * (y * w * C + x * C);
+            T *q = out + block * (y * C + x * h * C);
+
             for (int xx = 0; xx < blockx; xx++)
             {
                 for (int yy = 0; yy < blocky; yy++)
                 {
-                    for (int k = 0; k < C; k++)
+                    for (int k = 0; k < C; k++) 
                         q[k] = p[k];
                     p += w * C;
                     q += C;
                 }
-                p += -blocky * w * C + C;
-                q += -blocky * C + h * C;
+                p += C * (1 - blocky * w);
+                q += C * (h - blocky);
             }
-        }
+        });
 }
 
 template <typename T>
