@@ -1,5 +1,6 @@
 #pragma once
 #include <vector>
+#define L2_CACHE_SIZE (16 * 1024 * 1024)
 
 #ifdef DOUBLE_ACCUMULATOR
 #include <deque>
@@ -145,9 +146,9 @@ void horizontal_blur_kernel_reflect(const T *in, T *out, const int w, const int 
 template <typename T, int C>
 void flip_block(const T *in, T *out, const int w, const int h)
 {
-    // Suppose a square block of L2 cache size = 256KB
+    // Suppose a square block of L2 cache size = 16MB
     // to be divided for the num of channels and bytes
-    const int block = sqrt(262144.0 / (C * sizeof(T)));
+    const int block = sqrt((double)L2_CACHE_SIZE / (C * sizeof(T)));
     const int w_blocks = std::ceil((float)w / block);
     const int h_blocks = std::ceil((float)h / block);
     const int last_blockx = w % block == 0 ? block : w % block;
